@@ -1,0 +1,167 @@
+#include <boost/algorithm/string.hpp>
+#include <boost/foreach.hpp>
+#include <boost/test/unit_test.hpp>
+
+#include "util.h"
+
+BOOST_AUTO_TEST_SUITE(getarg_tests)
+
+static void
+ResetArgs(const std::string& strArg)
+{
+    std::vector<std::string> vecArg;
+    boost::split(vecArg, strArg, boost::is_space(), boost::token_compress_on);
+
+    // Insert dummy executable name:
+    vecArg.insert(vecArg.begin(), "testbitcoin");
+
+    // Convert to char*:
+    std::vector<const char*> vecChar;
+    BOOST_FOREACH(std::string& s, vecArg)
+        vecChar.push_back(s.c_str());
+
+    ParseParameters(vecChar.size(), &vecChar[0]);
+}
+
+BOOST_AUTO_TEST_CASE(boolarg)
+{
+    ResetArgs("-OSC");
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+
+    BOOST_CHECK(!GetBoolArg("-fo"));
+    BOOST_CHECK(!GetBoolArg("-fo", false));
+    BOOST_CHECK(GetBoolArg("-fo", true));
+
+    BOOST_CHECK(!GetBoolArg("-OSCo"));
+    BOOST_CHECK(!GetBoolArg("-OSCo", false));
+    BOOST_CHECK(GetBoolArg("-OSCo", true));
+
+    ResetArgs("-OSC=0");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+
+    ResetArgs("-OSC=1");
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+
+    // New 0.6 feature: auto-map -nosomething to !-something:
+    ResetArgs("-noOSC");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+
+    ResetArgs("-noOSC=1");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+
+    ResetArgs("-OSC -noOSC");  // -OSC should win
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+
+    ResetArgs("-OSC=1 -noOSC=1");  // -OSC should win
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+
+    ResetArgs("-OSC=0 -noOSC=0");  // -OSC should win
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+
+    // New 0.6 feature: treat -- same as -:
+    ResetArgs("--OSC=1");
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+
+    ResetArgs("--noOSC=1");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+
+}
+
+BOOST_AUTO_TEST_CASE(stringarg)
+{
+    ResetArgs("");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", "eleven"), "eleven");
+
+    ResetArgs("-OSC -bar");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", "eleven"), "");
+
+    ResetArgs("-OSC=");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", "eleven"), "");
+
+    ResetArgs("-OSC=11");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "11");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", "eleven"), "11");
+
+    ResetArgs("-OSC=eleven");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "eleven");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", "eleven"), "eleven");
+
+}
+
+BOOST_AUTO_TEST_CASE(intarg)
+{
+    ResetArgs("");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", 11), 11);
+    BOOST_CHECK_EQUAL(GetArg("-OSC", 0), 0);
+
+    ResetArgs("-OSC -bar");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", 11), 0);
+    BOOST_CHECK_EQUAL(GetArg("-bar", 11), 0);
+
+    ResetArgs("-OSC=11 -bar=12");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", 0), 11);
+    BOOST_CHECK_EQUAL(GetArg("-bar", 11), 12);
+
+    ResetArgs("-OSC=NaN -bar=NotANumber");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", 1), 0);
+    BOOST_CHECK_EQUAL(GetArg("-bar", 11), 0);
+}
+
+BOOST_AUTO_TEST_CASE(doubledash)
+{
+    ResetArgs("--OSC");
+    BOOST_CHECK_EQUAL(GetBoolArg("-OSC"), true);
+
+    ResetArgs("--OSC=verbose --bar=1");
+    BOOST_CHECK_EQUAL(GetArg("-OSC", ""), "verbose");
+    BOOST_CHECK_EQUAL(GetArg("-bar", 0), 1);
+}
+
+BOOST_AUTO_TEST_CASE(boolargno)
+{
+    ResetArgs("-noOSC");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+
+    ResetArgs("-noOSC=1");
+    BOOST_CHECK(!GetBoolArg("-OSC"));
+    BOOST_CHECK(!GetBoolArg("-OSC", true));
+    BOOST_CHECK(!GetBoolArg("-OSC", false));
+
+    ResetArgs("-noOSC=0");
+    BOOST_CHECK(GetBoolArg("-OSC"));
+    BOOST_CHECK(GetBoolArg("-OSC", true));
+    BOOST_CHECK(GetBoolArg("-OSC", false));
+
+    ResetArgs("-OSC --noOSC");
+    BOOST_CHECK(GetBoolArg("-OSC"));
+
+    ResetArgs("-noOSC -OSC"); // OSC always wins:
+    BOOST_CHECK(GetBoolArg("-OSC"));
+}
+
+BOOST_AUTO_TEST_SUITE_END()
